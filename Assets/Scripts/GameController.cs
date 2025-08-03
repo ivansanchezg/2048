@@ -9,6 +9,8 @@ public class GameController : MonoBehaviour
     public Number numberPrefab;
 
     Number[,] numbers;
+    List<Number> mergedNumbersToDestroy;
+    List<Number> mergedNumbersToUpdate;
 
     PlayerInput playerInput;
 
@@ -35,6 +37,8 @@ public class GameController : MonoBehaviour
     {
         isInputPaused = false;
         numbers = new Number[4, 4];
+        mergedNumbersToDestroy = new();
+        mergedNumbersToUpdate = new();
 
         // Instantiate 2 numbers in 2 random positions
         var position1 = getRandomPosition();
@@ -44,14 +48,17 @@ public class GameController : MonoBehaviour
             position2 = getRandomPosition();
         } while (position1 == position2);
 
-        print("Position 1: " + position1);
-        // print("Position 2: " + position2);
+        print("Number A: " + position1);
+        print("Number B: " + position2);
+        print("--------------------------------");
 
         var square1 = Instantiate(numberPrefab, new Vector3(position1.x, -position1.y, 1), Quaternion.identity);
-        // var square2 = Instantiate(numberPrefab, new Vector3(position2.x, -position2.y, 1), Quaternion.identity);
+        square1.name = "Number A";
+        var square2 = Instantiate(numberPrefab, new Vector3(position2.x, -position2.y, 1), Quaternion.identity);
+        square2.name = "Number B";
 
         numbers[position1.row, position1.col] = square1;
-        // numbers[position2.row, position2.col] = square2;
+        numbers[position2.row, position2.col] = square2;
     }
 
     void OnMovePerformed(InputAction.CallbackContext context)
@@ -59,183 +66,115 @@ public class GameController : MonoBehaviour
         if (isInputPaused) { return; }
 
         var input = context.ReadValue<Vector2>();
-        print($"input: {input}");
 
         if (input.y == 1)
         {
-            MoveUp();
+            Move(Direction.Up);
         }
         else if (input.y == -1)
         {
-            MoveDown();
+            Move(Direction.Down);
         }
         else if (input.x == 1)
         {
-            MoveRight();
+            Move(Direction.Right);
         }
         else if (input.x == -1)
         {
-            MoveLeft();
+            Move(Direction.Left);
         }
     }
 
-    void MoveUp()
+    void Move(Direction direction)
     {
-        print("Moving up");
+        print($"Moving {direction}");
         List<TileMove> movements = new();
         bool[,] merged = new bool[4, 4];
 
-        for (int col = 0; col < 4; col++)
+        // Directional vectors
+        Vector2Int directionVector = direction switch
         {
-            for (int row = 1; row < 4; row++)
+            Direction.Up => new Vector2Int(0, -1),
+            Direction.Down => new Vector2Int(0, 1),
+            Direction.Left => new Vector2Int(-1, 0),
+            Direction.Right => new Vector2Int(1, 0),
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
+        // Traversal order helpers
+        int[] rowOrder = direction == Direction.Up ? new[] { 1, 2, 3 } :
+                        direction == Direction.Down ? new[] { 2, 1, 0 } :
+                        new[] { 0, 1, 2, 3 };
+
+        int[] colOrder = direction == Direction.Left ? new[] { 1, 2, 3 } :
+                        direction == Direction.Right ? new[] { 2, 1, 0 } :
+                        new[] { 0, 1, 2, 3 };
+
+        foreach (int currentRow in rowOrder)
+        {
+            foreach (int currentCol in colOrder)
             {
-                if (numbers[row, col] == null) { continue; }
-
-                Number currentNumber = numbers[row, col];
-
-                int value = numbers[row, col].value;
-                int targetRow = row;
-
-                while (targetRow > 0 && numbers[targetRow - 1, col] == null)
-                {
-                    targetRow--;
-                }
-
-                if (targetRow > 0 && numbers[targetRow - 1, col].value == value && !merged[targetRow - 1, col])
-                {
-                    numbers[targetRow - 1, col].value *= 2;
-                    numbers[row, col] = null;
-                    merged[targetRow - 1, col] = true;
-                    movements.Add(new TileMove(
-                        numbers[targetRow - 1, col],
-                        new Vector2Int(row, col),
-                        new Vector2Int(targetRow - 1, col),
-                        true
-                    ));
-                }
-                else if (targetRow != row)
-                {
-                    numbers[targetRow, col] = currentNumber;
-                    numbers[row, col] = null;
-                    movements.Add(
-                        new TileMove(currentNumber, new Vector2Int(col, row), new Vector2Int(col, targetRow), false)
-                    );
-                }
-            }
-        }
-
-        // Execute tweening
-        if (movements.Count == 0)
-        {
-            print("No valid moves upward");
-            return;
-        }
-
-        PerformTweens(movements);
-    }
-
-    void MoveDown()
-    {
-        print("Move down");
-        List<TileMove> movements = new();
-        bool[,] merged = new bool[4, 4];
-
-        for (int col = 0; col < 4; col++)
-        {
-            for (int row = 2; row >= 0; row--)
-            {
-                if (numbers[row, col] == null) { continue; }
-
-                Number currentNumber = numbers[row, col];
-
-                int value = numbers[row, col].value;
-                int targetRow = row;
-
-                while (targetRow < 3 && numbers[targetRow + 1, col] == null)
-                {
-                    targetRow++;
-                }
-
-                print("targetRow:" + targetRow);
-
-                if (targetRow < 3 && numbers[targetRow + 1, col].value == value && !merged[targetRow + 1, col])
-                {
-                    numbers[targetRow + 1, col].value *= 2;
-                    numbers[row, col] = null;
-                    merged[targetRow + 1, col] = true;
-                    movements.Add(new TileMove(
-                        numbers[targetRow + 1, col],
-                        new Vector2Int(row, col),
-                        new Vector2Int(targetRow + 1, col),
-                        true
-                    ));
-                }
-                else if (targetRow != row)
-                {
-                    numbers[targetRow, col] = currentNumber;
-                    numbers[row, col] = null;
-                    movements.Add(
-                        new TileMove(currentNumber, new Vector2Int(col, row), new Vector2Int(col, targetRow), false)
-                    );
-                }
-            }
-        }
-
-        // Execute tweening
-        if (movements.Count == 0)
-        {
-            print("No valid moves downwards");
-            return;
-        }
-
-        PerformTweens(movements);
-    }
-
-    void MoveLeft()
-    {
-        print("Moving left");
-        List<TileMove> movements = new();
-        bool[,] merged = new bool[4, 4];
-
-        for (int row = 0; row < 4; row++)
-        {
-            for (int col = 1; col < 4; col++)
-            {
-                if (numbers[row, col] == null) { continue; }
+                int row = currentRow, col = currentCol;
+                if (numbers[row, col] == null) continue;
 
                 Number currentNumber = numbers[row, col];
                 int value = currentNumber.value;
+                int targetRow = row;
                 int targetCol = col;
+                bool skip = false;
 
-                // Find the furthest empty spot to the left
-                while (targetCol > 0 && numbers[row, targetCol - 1] == null)
+                // Slide in the direction until blocked
+                while (true)
                 {
-                    targetCol--;
+                    int nextRow = targetRow + directionVector.y;
+                    int nextCol = targetCol + directionVector.x;
+
+                    if (nextRow < 0 || nextRow >= 4 || nextCol < 0 || nextCol >= 4)
+                    {
+                        break;
+                    }
+
+                    if (numbers[nextRow, nextCol] == null)
+                    {
+                        targetRow = nextRow;
+                        targetCol = nextCol;
+                    }
+                    else if (numbers[nextRow, nextCol].value == value && !merged[nextRow, nextCol])
+                    {
+                        var mergedNumber = numbers[row, col];
+                        numbers[nextRow, nextCol].value *= 2;
+                        mergedNumbersToDestroy.Add(numbers[row, col]);
+                        mergedNumbersToUpdate.Add(numbers[nextRow, nextCol]);
+                        numbers[row, col] = null;
+                        merged[nextRow, nextCol] = true;
+
+                        print($"{mergedNumber.name} is moving from ({col}, {row}) to ({nextCol}, {nextRow}). Merged = true");
+                        movements.Add(new TileMove(
+                            mergedNumber,
+                            new Vector2Int(col, row),
+                            new Vector2Int(nextCol, nextRow),
+                            true
+                        ));
+
+                        skip = true;
+                        break;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
 
-                // Merge if same value and not already merged
-                if (targetCol > 0 && numbers[row, targetCol - 1].value == value && !merged[row, targetCol - 1])
+                if (!skip && (targetRow != row || targetCol != col))
                 {
-                    numbers[row, targetCol - 1].value *= 2;
-                    numbers[row, col] = null;
-                    merged[row, targetCol - 1] = true;
-
-                    movements.Add(new TileMove(
-                        numbers[row, targetCol - 1],
-                        new Vector2Int(col, row),
-                        new Vector2Int(targetCol - 1, row),
-                        true
-                    ));
-                }
-                else if (targetCol != col)
-                {
-                    numbers[row, targetCol] = currentNumber;
+                    numbers[targetRow, targetCol] = currentNumber;
                     numbers[row, col] = null;
 
+                    print($"{currentNumber.name} is moving from ({col}, {row}) to ({targetCol}, {targetRow}). Merged = false");
                     movements.Add(new TileMove(
                         currentNumber,
                         new Vector2Int(col, row),
-                        new Vector2Int(targetCol, row),
+                        new Vector2Int(targetCol, targetRow),
                         false
                     ));
                 }
@@ -244,67 +183,7 @@ public class GameController : MonoBehaviour
 
         if (movements.Count == 0)
         {
-            print("No valid moves leftward");
-            return;
-        }
-
-        PerformTweens(movements);
-    }
-
-    void MoveRight()
-    {
-        print("Moving right");
-        List<TileMove> movements = new();
-        bool[,] merged = new bool[4, 4];
-
-        for (int row = 0; row < 4; row++)
-        {
-            for (int col = 2; col >= 0; col--) // Start from second-to-last column
-            {
-                if (numbers[row, col] == null) { continue; }
-
-                Number currentNumber = numbers[row, col];
-                int value = currentNumber.value;
-                int targetCol = col;
-
-                // Find the furthest empty spot to the right
-                while (targetCol < 3 && numbers[row, targetCol + 1] == null)
-                {
-                    targetCol++;
-                }
-
-                // Merge if same value and not already merged
-                if (targetCol < 3 && numbers[row, targetCol + 1].value == value && !merged[row, targetCol + 1])
-                {
-                    numbers[row, targetCol + 1].value *= 2;
-                    numbers[row, col] = null;
-                    merged[row, targetCol + 1] = true;
-
-                    movements.Add(new TileMove(
-                        numbers[row, targetCol + 1],
-                        new Vector2Int(col, row),
-                        new Vector2Int(targetCol + 1, row),
-                        true
-                    ));
-                }
-                else if (targetCol != col)
-                {
-                    numbers[row, targetCol] = currentNumber;
-                    numbers[row, col] = null;
-
-                    movements.Add(new TileMove(
-                        currentNumber,
-                        new Vector2Int(col, row),
-                        new Vector2Int(targetCol, row),
-                        false
-                    ));
-                }
-            }
-        }
-
-        if (movements.Count == 0)
-        {
-            print("No valid moves rightward");
+            print($"No valid moves {direction.ToString().ToLower()}");
             return;
         }
 
@@ -313,31 +192,73 @@ public class GameController : MonoBehaviour
 
     void PerformTweens(List<TileMove> movements)
     {
+        print("Disabling input");
         isInputPaused = true;
-        Tween lastTween;
 
-        print("Performing tweening");
+        print($"Performing tweening for {movements.Count} tiles");
         for (int index = 0; index < movements.Count; index++)
         {
             var target = movements[index].target;
             var from = movements[index].from;
             var to = movements[index].to;
+            var merged = movements[index].merged;
 
-            print($"Moving from: {from} to {to} for tile in {target.transform.position}");
-
-            lastTween = Tween.Position(
+            print($"Moving from: {from} to {to} for tile {target.name} in {target.transform.position}. Merged = {merged}");
+            var tween = Tween.Position(
                 target.transform,
                 endValue: new Vector3(to.x, -to.y, 1),
                 duration: 0.25f,
                 ease: Ease.OutSine
             );
 
-            if (index == movements.Count - 1)
+            if (merged && index == movements.Count - 1)
             {
-                lastTween.OnComplete(() => { isInputPaused = false; });
+                tween.OnComplete(() =>
+                {
+                    print("Last tween complete, updating values...");
+                    UpdateMergedNumbers();
+                    DestroyMergedNumbers();
+                    print("Enabling input");
+                    isInputPaused = false;
+                });
+            }
+            else if (index == movements.Count - 1)
+            {
+                tween.OnComplete(() =>
+                {
+                    print("Last tween complete, updating values...");
+                    UpdateMergedNumbers();
+                    DestroyMergedNumbers();
+                    print("Enabling input");
+                    isInputPaused = false;
+                });
             }
         }
-        print("Completed tweening");
+        print($"Completed tweening for {movements.Count} tiles");
+    }
+
+    void DestroyMergedNumbers()
+    {
+        print($"Destroying {mergedNumbersToDestroy.Count} merged numbers");
+        foreach (Number number in mergedNumbersToDestroy)
+        {
+            print($"Destroying {number.name} in position {number.transform.position}");
+            Destroy(number.gameObject);
+        }
+        mergedNumbersToDestroy.Clear();
+        print("Destroyed all merged numbers");
+    }
+
+    void UpdateMergedNumbers()
+    {
+        print($"Updating {mergedNumbersToUpdate.Count} merged numbers");
+        foreach (Number number in mergedNumbersToUpdate)
+        {
+            print($"Updating {number.name} in position {number.transform.position}");
+            number.UpdateText();
+        }
+        mergedNumbersToUpdate.Clear();
+        print($"Updated all {mergedNumbersToUpdate.Count} merged numbers");        
     }
 
     Position getRandomPosition()
@@ -417,4 +338,12 @@ struct TileMove
         this.to = to;
         this.merged = merged;
     }
+}
+
+public enum Direction
+{
+    Up,
+    Down,
+    Left,
+    Right
 }
