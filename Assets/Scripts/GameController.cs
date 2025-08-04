@@ -198,7 +198,6 @@ public class GameController : MonoBehaviour
 
     void PerformTweens(List<TileMove> movements)
     {
-        print("Disabling input");
         isInputPaused = true;
 
         print($"Performing tweening for {movements.Count} tiles");
@@ -221,11 +220,10 @@ public class GameController : MonoBehaviour
             {
                 tween.OnComplete(() =>
                 {
-                    print("Last tween complete, updating values...");
+                    print("Last tween completed");
                     UpdateMergedNumbers();
                     DestroyMergedNumbers();
                     SpawnNewNumber();
-                    print("Enabling input");
                     isInputPaused = false;
                 });
             }
@@ -233,16 +231,14 @@ public class GameController : MonoBehaviour
             {
                 tween.OnComplete(() =>
                 {
-                    print("Last tween complete, updating values...");
+                    print("Last tween completed");
                     UpdateMergedNumbers();
                     DestroyMergedNumbers();
                     SpawnNewNumber();
-                    print("Enabling input");
                     isInputPaused = false;
                 });
             }
         }
-        print($"Completed tweening for {movements.Count} tiles");
     }
 
     void SpawnNewNumber()
@@ -250,6 +246,25 @@ public class GameController : MonoBehaviour
         var emptyTile = getRandomEmptyTile();
         var number = Instantiate(numberPrefab, new Vector3(emptyTile.x, -emptyTile.y, 1), Quaternion.identity);
         numbers[emptyTile.row, emptyTile.col] = number;
+        print($"Spawning new number at ({emptyTile.col}, {emptyTile.row})");
+
+        int count = 0;
+        List<Tuple<int, int>> occupiedPositions = new();
+        for (int i = 0; i < numbers.GetLength(0); i++)
+        {
+            for (int j = 0; j < numbers.GetLength(1); j++)
+            {
+                if (numbers[i, j] != null)
+                {
+                    count++;
+                    occupiedPositions.Add(new (i, j));
+                }
+            }
+        }
+
+        print($"There are {count} numbers in the grid");
+        print($"{string.Join(" | ", occupiedPositions)}");
+        print("----------------------\n");
     }
 
     void DestroyMergedNumbers()
@@ -285,16 +300,16 @@ public class GameController : MonoBehaviour
 
     Position getRandomEmptyTile()
     {
-        int x;
-        int y;
+        int row;
+        int col;
 
         do
         {
-            x = UnityEngine.Random.Range(0, 4);
-            y = UnityEngine.Random.Range(0, 4);
-        } while (numbers[x, y] != null);
+            row = UnityEngine.Random.Range(0, 4);
+            col = UnityEngine.Random.Range(0, 4);
+        } while (numbers[row, col] != null);
 
-        return new Position(x, y);
+        return Position.fromRowAndCol(row, col);
     }
 }
 
@@ -311,6 +326,11 @@ struct Position
         this.y = y;
         col = x;
         row = y;
+    }
+
+    public static Position fromRowAndCol(int row, int col)
+    {
+        return new Position(col, row);
     }
 
     public static bool operator ==(Position a, Position b)
