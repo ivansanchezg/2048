@@ -286,6 +286,9 @@ public class GameController : MonoBehaviour
         {
             print($"Updating {number.name} in position {number.transform.position}");
             number.UpdateTextAndColor();
+            Sequence.Create()
+                .Chain(Tween.Scale(number.transform, new Vector3(0.95f, 0.95f, 1f), duration: 0.15f, ease: Ease.OutQuad))
+                .Chain(Tween.Scale(number.transform, new Vector3(0.85f, 0.85f, 1f), duration: 0.15f, ease: Ease.OutQuad));
         }
         mergedNumbersToUpdate.Clear();
         print($"Updated all {mergedNumbersToUpdate.Count} merged numbers");        
