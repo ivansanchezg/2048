@@ -285,7 +285,7 @@ public class GameController : MonoBehaviour
         foreach (Number number in mergedNumbersToUpdate)
         {
             print($"Updating {number.name} in position {number.transform.position}");
-            number.UpdateText();
+            number.UpdateTextAndColor();
         }
         mergedNumbersToUpdate.Clear();
         print($"Updated all {mergedNumbersToUpdate.Count} merged numbers");        
