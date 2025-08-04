@@ -39,7 +39,11 @@ public class GameController : MonoBehaviour
         numbers = new Number[4, 4];
         mergedNumbersToDestroy = new();
         mergedNumbersToUpdate = new();
+        InstantiateInitialNumbers();
+    }
 
+    void InstantiateInitialNumbers()
+    {
         // Instantiate 2 numbers in 2 random positions
         var position1 = getRandomPosition();
         Position position2;
@@ -48,14 +52,15 @@ public class GameController : MonoBehaviour
             position2 = getRandomPosition();
         } while (position1 == position2);
 
+        // TODO: Delete after testing
         print("Number A: " + position1);
         print("Number B: " + position2);
         print("--------------------------------");
 
         var square1 = Instantiate(numberPrefab, new Vector3(position1.x, -position1.y, 1), Quaternion.identity);
-        square1.name = "Number A";
+        square1.name = "Number A"; // TODO: Delete after testing
         var square2 = Instantiate(numberPrefab, new Vector3(position2.x, -position2.y, 1), Quaternion.identity);
-        square2.name = "Number B";
+        square2.name = "Number B"; // TODO: Delete after testing
 
         numbers[position1.row, position1.col] = square1;
         numbers[position2.row, position2.col] = square2;
@@ -84,6 +89,7 @@ public class GameController : MonoBehaviour
             Move(Direction.Left);
         }
     }
+
 
     void Move(Direction direction)
     {
@@ -218,6 +224,7 @@ public class GameController : MonoBehaviour
                     print("Last tween complete, updating values...");
                     UpdateMergedNumbers();
                     DestroyMergedNumbers();
+                    SpawnNewNumber();
                     print("Enabling input");
                     isInputPaused = false;
                 });
@@ -229,12 +236,20 @@ public class GameController : MonoBehaviour
                     print("Last tween complete, updating values...");
                     UpdateMergedNumbers();
                     DestroyMergedNumbers();
+                    SpawnNewNumber();
                     print("Enabling input");
                     isInputPaused = false;
                 });
             }
         }
         print($"Completed tweening for {movements.Count} tiles");
+    }
+
+    void SpawnNewNumber()
+    {
+        var emptyTile = getRandomEmptyTile();
+        var number = Instantiate(numberPrefab, new Vector3(emptyTile.x, -emptyTile.y, 1), Quaternion.identity);
+        numbers[emptyTile.row, emptyTile.col] = number;
     }
 
     void DestroyMergedNumbers()
