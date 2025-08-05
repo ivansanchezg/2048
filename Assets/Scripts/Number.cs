@@ -54,5 +54,11 @@ public class Number : MonoBehaviour
         {
             textMeshPro.color = Color.black;
         }
+
+        if (value >= 1024)
+        {
+            textMeshPro.fontSize = 34f;
+            textMeshPro.characterSpacing = -12f;
+        }
     }
 }

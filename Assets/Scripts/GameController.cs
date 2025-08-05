@@ -4,12 +4,22 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+// TODOs
+// Display game over
+// Add restart button
+// Add title and name
+// Sound effects
+// Dark mode (toggle)
+
 public class GameController : MonoBehaviour
 {
+    private const int COLS = 4;
+    private const int ROWS = 4;
+
     public Number numberPrefab;
 
     Number[,] numbers;
-    List<Number> mergedNumbersToDestroy;
+    List<Number> numbersMergedIntoOtherToDestroy;
     List<Number> mergedNumbersToUpdate;
 
     PlayerInput playerInput;
@@ -36,34 +46,26 @@ public class GameController : MonoBehaviour
     void Start()
     {
         isInputPaused = false;
-        numbers = new Number[4, 4];
-        mergedNumbersToDestroy = new();
+        numbers = new Number[ROWS, COLS];
+        numbersMergedIntoOtherToDestroy = new();
         mergedNumbersToUpdate = new();
         InstantiateInitialNumbers();
     }
 
     void InstantiateInitialNumbers()
     {
-        // Instantiate 2 numbers in 2 random positions
-        var position1 = getRandomPosition();
+        var position1 = getRandomEmptyTile();
         Position position2;
         do
         {
-            position2 = getRandomPosition();
+            position2 = getRandomEmptyTile();
         } while (position1 == position2);
 
-        // TODO: Delete after testing
-        print("Number A: " + position1);
-        print("Number B: " + position2);
-        print("--------------------------------");
+        var numberA = Instantiate(numberPrefab, new Vector3(position1.x, -position1.y, 1), Quaternion.identity);
+        var numberB = Instantiate(numberPrefab, new Vector3(position2.x, -position2.y, 1), Quaternion.identity);
 
-        var square1 = Instantiate(numberPrefab, new Vector3(position1.x, -position1.y, 1), Quaternion.identity);
-        square1.name = "Number A"; // TODO: Delete after testing
-        var square2 = Instantiate(numberPrefab, new Vector3(position2.x, -position2.y, 1), Quaternion.identity);
-        square2.name = "Number B"; // TODO: Delete after testing
-
-        numbers[position1.row, position1.col] = square1;
-        numbers[position2.row, position2.col] = square2;
+        numbers[position1.row, position1.col] = numberA;
+        numbers[position2.row, position2.col] = numberB;
     }
 
     void OnMovePerformed(InputAction.CallbackContext context)
@@ -71,34 +73,53 @@ public class GameController : MonoBehaviour
         if (isInputPaused) { return; }
 
         var input = context.ReadValue<Vector2>();
-
         if (input.y == 1)
         {
-            Move(Direction.Up);
+            ExecuteTurn(Direction.Up);
         }
         else if (input.y == -1)
         {
-            Move(Direction.Down);
+            ExecuteTurn(Direction.Down);
         }
         else if (input.x == 1)
         {
-            Move(Direction.Right);
+            ExecuteTurn(Direction.Right);
         }
         else if (input.x == -1)
         {
-            Move(Direction.Left);
+            ExecuteTurn(Direction.Left);
         }
     }
 
-
-    void Move(Direction direction)
+    void ExecuteTurn(Direction direction)
     {
-        print($"Moving {direction}");
-        List<TileMove> movements = new();
-        bool[,] merged = new bool[4, 4];
+        isInputPaused = true;
+        var movements = Move(direction);
+
+        // If there are no valid movements for that direction, we end the turn
+        if (movements.Count == 0)
+        {
+            isInputPaused = false;
+            return;
+        }
+
+        var sequence = PerformTweens(movements);
+        sequence.OnComplete(() => {
+            UpdateMergedNumbers();
+            DestroyMergedNumbers();
+            SpawnNewNumber();
+            CheckGameOver();
+            isInputPaused = false;
+        });
+    }
+
+    List<TileMovement> Move(Direction direction)
+    {
+        List<TileMovement> movements = new();
+        bool[,] merged = new bool[ROWS, COLS];
 
         // Directional vectors
-        Vector2Int directionVector = direction switch
+        Vector2Int directionalVector = direction switch
         {
             Direction.Up => new Vector2Int(0, -1),
             Direction.Down => new Vector2Int(0, 1),
@@ -120,8 +141,9 @@ public class GameController : MonoBehaviour
         {
             foreach (int currentCol in colOrder)
             {
-                int row = currentRow, col = currentCol;
-                if (numbers[row, col] == null) continue;
+                int row = currentRow;
+                int col = currentCol;
+                if (numbers[row, col] == null) { continue; }
 
                 Number currentNumber = numbers[row, col];
                 int value = currentNumber.value;
@@ -132,36 +154,32 @@ public class GameController : MonoBehaviour
                 // Slide in the direction until blocked
                 while (true)
                 {
-                    int nextRow = targetRow + directionVector.y;
-                    int nextCol = targetCol + directionVector.x;
+                    int nextRow = targetRow + directionalVector.y;
+                    int nextCol = targetCol + directionalVector.x;
 
-                    if (nextRow < 0 || nextRow >= 4 || nextCol < 0 || nextCol >= 4)
+                    if (nextRow < 0 || nextRow >= ROWS || nextCol < 0 || nextCol >= COLS)
                     {
                         break;
                     }
 
+                    // If the next tile is empty (null), the tile can move, 
+                    // so we increase the update the targetRow and targetCol values
                     if (numbers[nextRow, nextCol] == null)
                     {
                         targetRow = nextRow;
                         targetCol = nextCol;
                     }
+                    // If the next tile in range has the same value and we haven't marked it as merged, then we perform a merge
+                    // and store the movement for the tweening.
                     else if (numbers[nextRow, nextCol].value == value && !merged[nextRow, nextCol])
                     {
                         var mergedNumber = numbers[row, col];
                         numbers[nextRow, nextCol].value *= 2;
-                        mergedNumbersToDestroy.Add(numbers[row, col]);
+                        numbersMergedIntoOtherToDestroy.Add(numbers[row, col]);
                         mergedNumbersToUpdate.Add(numbers[nextRow, nextCol]);
                         numbers[row, col] = null;
                         merged[nextRow, nextCol] = true;
-
-                        print($"{mergedNumber.name} is moving from ({col}, {row}) to ({nextCol}, {nextRow}). Merged = true");
-                        movements.Add(new TileMove(
-                            mergedNumber,
-                            new Vector2Int(col, row),
-                            new Vector2Int(nextCol, nextRow),
-                            true
-                        ));
-
+                        movements.Add(new TileMovement(mergedNumber,new Vector2Int(nextCol, nextRow)));
                         skip = true;
                         break;
                     }
@@ -171,74 +189,35 @@ public class GameController : MonoBehaviour
                     }
                 }
 
+                // If we didn't merged (skipped) and we moved to another tile, then store the movement for the tweening
                 if (!skip && (targetRow != row || targetCol != col))
                 {
                     numbers[targetRow, targetCol] = currentNumber;
                     numbers[row, col] = null;
-
-                    print($"{currentNumber.name} is moving from ({col}, {row}) to ({targetCol}, {targetRow}). Merged = false");
-                    movements.Add(new TileMove(
-                        currentNumber,
-                        new Vector2Int(col, row),
-                        new Vector2Int(targetCol, targetRow),
-                        false
-                    ));
+                    movements.Add(new TileMovement(currentNumber, new Vector2Int(targetCol, targetRow)));
                 }
             }
         }
 
-        if (movements.Count == 0)
-        {
-            print($"No valid moves {direction.ToString().ToLower()}");
-            return;
-        }
-
-        PerformTweens(movements);
+        return movements;
     }
 
-    void PerformTweens(List<TileMove> movements)
+    Sequence PerformTweens(List<TileMovement> movements)
     {
-        isInputPaused = true;
-
-        print($"Performing tweening for {movements.Count} tiles");
+        var sequence = Sequence.Create();
         for (int index = 0; index < movements.Count; index++)
         {
-            var target = movements[index].target;
-            var from = movements[index].from;
+            var target = movements[index].numberToMove;
             var to = movements[index].to;
-            var merged = movements[index].merged;
 
-            print($"Moving from: {from} to {to} for tile {target.name} in {target.transform.position}. Merged = {merged}");
-            var tween = Tween.Position(
+            sequence.Group(Tween.Position(
                 target.transform,
                 endValue: new Vector3(to.x, -to.y, 1),
                 duration: 0.25f,
                 ease: Ease.OutSine
-            );
-
-            if (merged && index == movements.Count - 1)
-            {
-                tween.OnComplete(() =>
-                {
-                    print("Last tween completed");
-                    UpdateMergedNumbers();
-                    DestroyMergedNumbers();
-                    SpawnNewNumber();
-                    isInputPaused = false;
-                });
-            }
-            else if (index == movements.Count - 1)
-            {
-                tween.OnComplete(() =>
-                {
-                    print("Last tween completed");
-                    UpdateMergedNumbers();
-                    DestroyMergedNumbers();
-                    SpawnNewNumber();
-                    isInputPaused = false;
-                });
-            }
+            ));
         }
+        return sequence;
     }
 
     void SpawnNewNumber()
@@ -246,59 +225,77 @@ public class GameController : MonoBehaviour
         var emptyTile = getRandomEmptyTile();
         var number = Instantiate(numberPrefab, new Vector3(emptyTile.x, -emptyTile.y, 1), Quaternion.identity);
         numbers[emptyTile.row, emptyTile.col] = number;
-        print($"Spawning new number at ({emptyTile.col}, {emptyTile.row})");
+    }
 
+    void CheckGameOver()
+    {
         int count = 0;
-        List<Tuple<int, int>> occupiedPositions = new();
-        for (int i = 0; i < numbers.GetLength(0); i++)
+        for (int row = 0; row < ROWS; row++)
         {
-            for (int j = 0; j < numbers.GetLength(1); j++)
+            for (int col = 0; col < COLS; col++)
             {
-                if (numbers[i, j] != null)
+                if (numbers[row, col] != null)
                 {
                     count++;
-                    occupiedPositions.Add(new (i, j));
                 }
             }
         }
 
-        print($"There are {count} numbers in the grid");
-        print($"{string.Join(" | ", occupiedPositions)}");
-        print("----------------------\n");
+        if (count < (ROWS * COLS))
+        {
+            return;
+        }
+
+        print("The board is full. Checking if there are any valid movements");
+
+        // Checking rows first
+        for (int row = 0; row < ROWS - 1; row++)
+        {
+            for (int col = 0; col < COLS; col++)
+            {
+                if (numbers[row, col].value == numbers[row + 1, col].value)
+                {
+                    print($"Found a possible movement between ({row}, {col}) and ({row + 1}, {col})");
+                    return;
+                }
+            }
+        }
+
+        // Checking columns
+        for (int row = 0; row < ROWS; row++)
+        {
+            for (int col = 0; col < COLS - 1; col++)
+            {
+                if (numbers[row, col].value == numbers[row, col + 1].value)
+                {
+                    print($"Found a possible movement between ({row}, {col}) and ({row}, {col + 1})");
+                    return;
+                }
+            }
+        }
+
+        print("No valid movements found. GAME OVER");
     }
 
     void DestroyMergedNumbers()
     {
-        print($"Destroying {mergedNumbersToDestroy.Count} merged numbers");
-        foreach (Number number in mergedNumbersToDestroy)
+        foreach (Number number in numbersMergedIntoOtherToDestroy)
         {
-            print($"Destroying {number.name} in position {number.transform.position}");
             Destroy(number.gameObject);
         }
-        mergedNumbersToDestroy.Clear();
-        print("Destroyed all merged numbers");
+        numbersMergedIntoOtherToDestroy.Clear();
     }
 
     void UpdateMergedNumbers()
     {
-        print($"Updating {mergedNumbersToUpdate.Count} merged numbers");
         foreach (Number number in mergedNumbersToUpdate)
         {
-            print($"Updating {number.name} in position {number.transform.position}");
             number.UpdateTextAndColor();
             Sequence.Create()
                 .Chain(Tween.Scale(number.transform, new Vector3(0.95f, 0.95f, 1f), duration: 0.15f, ease: Ease.OutQuad))
                 .Chain(Tween.Scale(number.transform, new Vector3(0.85f, 0.85f, 1f), duration: 0.15f, ease: Ease.OutQuad));
         }
         mergedNumbersToUpdate.Clear();
-        print($"Updated all {mergedNumbersToUpdate.Count} merged numbers");        
-    }
-
-    Position getRandomPosition()
-    {
-        int x = UnityEngine.Random.Range(0, 4);
-        int y = UnityEngine.Random.Range(0, 4);
-        return new Position(x, y);
     }
 
     Position getRandomEmptyTile()
@@ -308,8 +305,8 @@ public class GameController : MonoBehaviour
 
         do
         {
-            row = UnityEngine.Random.Range(0, 4);
-            col = UnityEngine.Random.Range(0, 4);
+            row = UnityEngine.Random.Range(0, ROWS);
+            col = UnityEngine.Random.Range(0, COLS);
         } while (numbers[row, col] != null);
 
         return Position.fromRowAndCol(row, col);
@@ -362,19 +359,15 @@ struct Position
     }
 }
 
-struct TileMove
+struct TileMovement
 {
-    public Number target { get; private set; }
-    public Vector2Int from { get; private set; }
+    public Number numberToMove { get; private set; }
     public Vector2Int to { get; private set; }
-    public bool merged { get; private set; }
 
-    internal TileMove(Number target, Vector2Int from, Vector2Int to, bool merged)
+    internal TileMovement(Number numberToMove, Vector2Int to)
     {
-        this.target = target;
-        this.from = from;
+        this.numberToMove = numberToMove;
         this.to = to;
-        this.merged = merged;
     }
 }
 
