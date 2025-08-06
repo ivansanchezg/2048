@@ -9,8 +9,6 @@ using UnityEngine.InputSystem;
 // Display game over
 // Add restart button
 // Add title and name
-// Sound effects
-// Dark mode (toggle)
 
 public class GameController : MonoBehaviour
 {
@@ -134,7 +132,7 @@ public class GameController : MonoBehaviour
             return;
         }
 
-        var sequence = PerformTweens(movements);
+        var sequence = PerformTweens(movements, direction);
         sequence.OnComplete(() =>
         {
             UpdateMergedNumbers();
@@ -234,21 +232,59 @@ public class GameController : MonoBehaviour
         return movements;
     }
 
-    Sequence PerformTweens(List<TileMovement> movements)
-    {
+    Sequence PerformTweens(List<TileMovement> movements, Direction direction)
+    {        
+        Vector3 directionVector = direction switch
+        {
+            Direction.Up => Vector3.up,
+            Direction.Down => Vector3.down,
+            Direction.Left => Vector3.left,
+            Direction.Right => Vector3.right,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
         var sequence = Sequence.Create();
+
+        var movementSequence = Sequence.Create();
         for (int index = 0; index < movements.Count; index++)
         {
             var target = movements[index].numberToMove;
             var to = movements[index].to;
 
-            sequence.Group(Tween.Position(
+            movementSequence.Group(Tween.Position(
                 target.transform,
                 endValue: new Vector3(to.x, -to.y, 1),
-                duration: 0.25f,
+                duration: 0.2f,
                 ease: Ease.OutSine
             ));
         }
+
+        var bounceSequence = Sequence.Create();
+        for (int index = 0; index < movements.Count; index++)
+        {
+            if (numbersMergedIntoOtherToDestroy.Contains(movements[index].numberToMove))
+            {
+                continue;
+            }
+
+            if (mergedNumbersToUpdate.Contains(movements[index].numberToMove))
+            {
+                continue;
+            }
+
+            var target = movements[index].numberToMove;
+            bounceSequence.Group(
+                Tween.PunchLocalPosition(
+                    target.transform,
+                    strength: directionVector * 0.20f,
+                    duration: 0.1f,
+                    frequency: 10f
+                )
+            );
+        }
+
+        sequence.Chain(movementSequence).Chain(bounceSequence);
+
         return sequence;
     }
 
