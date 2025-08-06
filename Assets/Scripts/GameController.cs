@@ -1,6 +1,7 @@
 using PrimeTween;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -13,10 +14,17 @@ using UnityEngine.InputSystem;
 
 public class GameController : MonoBehaviour
 {
-    private const int COLS = 4;
-    private const int ROWS = 4;
+    [SerializeField] SpriteRenderer gridBackground;
+    [SerializeField] GameObject row0;
+    [SerializeField] GameObject row1;
+    [SerializeField] GameObject row2;
+    [SerializeField] GameObject row3;
+    [SerializeField] Number numberPrefab;
 
-    public Number numberPrefab;
+    const int COLS = 4;
+    const int ROWS = 4;
+
+    List<SpriteRenderer> tilesSpriteRenderers;
 
     Number[,] numbers;
     List<Number> numbersMergedIntoOtherToDestroy;
@@ -25,6 +33,16 @@ public class GameController : MonoBehaviour
     PlayerInput playerInput;
 
     bool isInputPaused;
+
+    // Colors
+    Color cameraLightBackground = new Color(100f / 255f, 150f / 255f, 200f / 255f);
+    Color cameraDarkBackground = new Color(40f / 255f, 40f / 255f, 40f / 255f);
+
+    Color gridLightBackground = new Color(33f / 255f, 33f / 255f, 33f / 255f);
+    Color gridDarkBackground = new Color(220f / 255f, 220f / 255f, 220f / 255f);
+
+    Color tilesLightColor = new Color(220f / 255f, 220f / 255f, 220f / 255f);
+    Color tilesDarkColor = new Color(110f / 255f, 110f / 255f, 110f / 255f);
 
     void Awake()
     {
@@ -35,16 +53,26 @@ public class GameController : MonoBehaviour
     {
         playerInput.PlayerController.Move.performed += OnMovePerformed;
         playerInput.PlayerController.Move.Enable();
+
+        GameSettings.instance.colorModeChanged += UpdateColors;
     }
 
     void OnDisable()
     {
         playerInput.PlayerController.Move.performed -= OnMovePerformed;
         playerInput.PlayerController.Move.Disable();
+
+        GameSettings.instance.colorModeChanged -= UpdateColors;
     }
 
     void Start()
     {
+        tilesSpriteRenderers = new();
+        tilesSpriteRenderers.AddRange(row0.GetComponentsInChildren<SpriteRenderer>());
+        tilesSpriteRenderers.AddRange(row1.GetComponentsInChildren<SpriteRenderer>());
+        tilesSpriteRenderers.AddRange(row2.GetComponentsInChildren<SpriteRenderer>());
+        tilesSpriteRenderers.AddRange(row3.GetComponentsInChildren<SpriteRenderer>());
+
         isInputPaused = false;
         numbers = new Number[ROWS, COLS];
         numbersMergedIntoOtherToDestroy = new();
@@ -66,6 +94,9 @@ public class GameController : MonoBehaviour
 
         numbers[position1.row, position1.col] = numberA;
         numbers[position2.row, position2.col] = numberB;
+
+        numberA.ToggleColors();
+        numberB.ToggleColors();
     }
 
     void OnMovePerformed(InputAction.CallbackContext context)
@@ -104,7 +135,8 @@ public class GameController : MonoBehaviour
         }
 
         var sequence = PerformTweens(movements);
-        sequence.OnComplete(() => {
+        sequence.OnComplete(() =>
+        {
             UpdateMergedNumbers();
             DestroyMergedNumbers();
             SpawnNewNumber();
@@ -179,7 +211,7 @@ public class GameController : MonoBehaviour
                         mergedNumbersToUpdate.Add(numbers[nextRow, nextCol]);
                         numbers[row, col] = null;
                         merged[nextRow, nextCol] = true;
-                        movements.Add(new TileMovement(mergedNumber,new Vector2Int(nextCol, nextRow)));
+                        movements.Add(new TileMovement(mergedNumber, new Vector2Int(nextCol, nextRow)));
                         skip = true;
                         break;
                     }
@@ -225,6 +257,7 @@ public class GameController : MonoBehaviour
         var emptyTile = getRandomEmptyTile();
         var number = Instantiate(numberPrefab, new Vector3(emptyTile.x, -emptyTile.y, 1), Quaternion.identity);
         numbers[emptyTile.row, emptyTile.col] = number;
+        number.ToggleColors();
     }
 
     void CheckGameOver()
@@ -310,6 +343,41 @@ public class GameController : MonoBehaviour
         } while (numbers[row, col] != null);
 
         return Position.fromRowAndCol(row, col);
+    }
+
+    void UpdateColors()
+    {
+        if (GameSettings.instance.colorMode == ColorMode.Light)
+        {
+            print("Updating colors to light mode");
+            Camera.main.backgroundColor = cameraLightBackground;
+            gridBackground.color = gridLightBackground;
+            foreach (SpriteRenderer spriteRenderer in tilesSpriteRenderers)
+            {
+                spriteRenderer.color = tilesLightColor;
+            }
+        }
+        else
+        {
+            print("Updating colors to dark mode");
+            Camera.main.backgroundColor = cameraDarkBackground;
+            gridBackground.color = gridDarkBackground;
+            foreach (SpriteRenderer spriteRenderer in tilesSpriteRenderers)
+            {
+                spriteRenderer.color = tilesDarkColor;
+            }
+        }
+
+        for (int row = 0; row < ROWS; row++)
+        {
+            for (int col = 0; col < COLS; col++)
+            {
+                if (numbers[row, col] != null)
+                {
+                    numbers[row, col].ToggleColors();
+                }
+            }
+        }
     }
 }
 
