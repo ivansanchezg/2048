@@ -7,8 +7,6 @@ using UnityEngine.InputSystem;
 
 // TODOs
 // Display game over
-// Add restart button
-// Add title and name
 
 public class GameController : MonoBehaviour
 {
@@ -76,6 +74,18 @@ public class GameController : MonoBehaviour
         numbersMergedIntoOtherToDestroy = new();
         mergedNumbersToUpdate = new();
         InstantiateInitialNumbers();
+    }
+
+    public void Restart()
+    {
+        foreach (Number number in numbers)
+        {
+            if (number != null)
+            {
+                Destroy(number.gameObject);
+            }            
+        }
+        Start();
     }
 
     void InstantiateInitialNumbers()
