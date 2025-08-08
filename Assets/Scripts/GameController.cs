@@ -312,8 +312,8 @@ public class GameController : MonoBehaviour
                 Tween.PunchLocalPosition(
                     target.transform,
                     strength: directionVector * 0.20f,
-                    duration: 0.075f,
-                    frequency: 7.5f
+                    duration: 0.08f,
+                    frequency: 10f
                 )
             );
         }
