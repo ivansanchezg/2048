@@ -1,21 +1,22 @@
 using PrimeTween;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// TODOs
-// Display game over
-
 public class GameController : MonoBehaviour
 {
+    [Header("Grid")]
     [SerializeField] SpriteRenderer gridBackground;
     [SerializeField] GameObject row0;
     [SerializeField] GameObject row1;
     [SerializeField] GameObject row2;
     [SerializeField] GameObject row3;
     [SerializeField] Number numberPrefab;
+
+    [Header("UI")]
+    [SerializeField] GameObject gameOverBanner;
+    [SerializeField] GameObject wonBanner;
 
     const int COLS = 4;
     const int ROWS = 4;
@@ -28,7 +29,9 @@ public class GameController : MonoBehaviour
 
     PlayerInput playerInput;
 
-    bool isInputPaused;
+    bool isInputEnabled;
+    bool gameOver;
+    bool won;
 
     // Colors
     Color cameraLightBackground = new Color(100f / 255f, 150f / 255f, 200f / 255f);
@@ -48,7 +51,8 @@ public class GameController : MonoBehaviour
     void OnEnable()
     {
         playerInput.PlayerController.Move.performed += OnMovePerformed;
-        playerInput.PlayerController.Move.Enable();
+        playerInput.PlayerController.Accept.performed += OnAccept;
+        playerInput.PlayerController.Enable();
 
         GameSettings.instance.colorModeChanged += UpdateColors;
     }
@@ -56,7 +60,8 @@ public class GameController : MonoBehaviour
     void OnDisable()
     {
         playerInput.PlayerController.Move.performed -= OnMovePerformed;
-        playerInput.PlayerController.Move.Disable();
+        playerInput.PlayerController.Accept.performed -= OnAccept;
+        playerInput.PlayerController.Disable();
 
         GameSettings.instance.colorModeChanged -= UpdateColors;
     }
@@ -69,7 +74,12 @@ public class GameController : MonoBehaviour
         tilesSpriteRenderers.AddRange(row2.GetComponentsInChildren<SpriteRenderer>());
         tilesSpriteRenderers.AddRange(row3.GetComponentsInChildren<SpriteRenderer>());
 
-        isInputPaused = false;
+        gameOverBanner.SetActive(false);
+        wonBanner.SetActive(false);
+
+        isInputEnabled = true;
+        gameOver = false;
+        won = false;
         numbers = new Number[ROWS, COLS];
         numbersMergedIntoOtherToDestroy = new();
         mergedNumbersToUpdate = new();
@@ -109,7 +119,7 @@ public class GameController : MonoBehaviour
 
     void OnMovePerformed(InputAction.CallbackContext context)
     {
-        if (isInputPaused) { return; }
+        if (!isInputEnabled) { return; }
 
         var input = context.ReadValue<Vector2>();
         if (input.y == 1)
@@ -130,15 +140,29 @@ public class GameController : MonoBehaviour
         }
     }
 
+    void OnAccept(InputAction.CallbackContext context)
+    {
+        if (gameOver == true)
+        {
+            Restart();
+        }
+
+        if (won == true)
+        {
+            wonBanner.SetActive(false);
+            isInputEnabled = true;
+        }
+    } 
+
     void ExecuteTurn(Direction direction)
     {
-        isInputPaused = true;
+        isInputEnabled = false;
         var movements = Move(direction);
 
         // If there are no valid movements for that direction, we end the turn
         if (movements.Count == 0)
         {
-            isInputPaused = false;
+            isInputEnabled = true;
             return;
         }
 
@@ -149,7 +173,8 @@ public class GameController : MonoBehaviour
             DestroyMergedNumbers();
             SpawnNewNumber();
             CheckGameOver();
-            isInputPaused = false;
+            CheckWin();
+            isInputEnabled = true;
         });
     }
 
@@ -264,7 +289,7 @@ public class GameController : MonoBehaviour
             movementSequence.Group(Tween.Position(
                 target.transform,
                 endValue: new Vector3(to.x, -to.y, 1),
-                duration: 0.2f,
+                duration: 0.15f,
                 ease: Ease.OutSine
             ));
         }
@@ -287,8 +312,8 @@ public class GameController : MonoBehaviour
                 Tween.PunchLocalPosition(
                     target.transform,
                     strength: directionVector * 0.20f,
-                    duration: 0.1f,
-                    frequency: 10f
+                    duration: 0.075f,
+                    frequency: 7.5f
                 )
             );
         }
@@ -304,6 +329,27 @@ public class GameController : MonoBehaviour
         var number = Instantiate(numberPrefab, new Vector3(emptyTile.x, -emptyTile.y, 1), Quaternion.identity);
         numbers[emptyTile.row, emptyTile.col] = number;
         number.ToggleColors();
+    }
+
+    void CheckWin()
+    {
+        if (won) { return; }
+
+        for (int row = 0; row < ROWS; row++)
+        {
+            for (int col = 0; col < COLS; col++)
+            {
+                if (numbers[row, col] != null)
+                {
+                    if (numbers[row, col].value == 2048)
+                    {
+                        won = true;
+                        wonBanner.SetActive(true);
+                        isInputEnabled = false;
+                    }
+                }
+            }
+        }
     }
 
     void CheckGameOver()
@@ -325,7 +371,6 @@ public class GameController : MonoBehaviour
             return;
         }
 
-        print("The board is full. Checking if there are any valid movements");
 
         // Checking rows first
         for (int row = 0; row < ROWS - 1; row++)
@@ -334,7 +379,6 @@ public class GameController : MonoBehaviour
             {
                 if (numbers[row, col].value == numbers[row + 1, col].value)
                 {
-                    print($"Found a possible movement between ({row}, {col}) and ({row + 1}, {col})");
                     return;
                 }
             }
@@ -347,13 +391,14 @@ public class GameController : MonoBehaviour
             {
                 if (numbers[row, col].value == numbers[row, col + 1].value)
                 {
-                    print($"Found a possible movement between ({row}, {col}) and ({row}, {col + 1})");
                     return;
                 }
             }
         }
 
-        print("No valid movements found. GAME OVER");
+        isInputEnabled = false;
+        gameOverBanner.SetActive(true);
+        gameOver = true;
     }
 
     void DestroyMergedNumbers()
@@ -371,8 +416,8 @@ public class GameController : MonoBehaviour
         {
             number.UpdateTextAndColor();
             Sequence.Create()
-                .Chain(Tween.Scale(number.transform, new Vector3(0.95f, 0.95f, 1f), duration: 0.15f, ease: Ease.OutQuad))
-                .Chain(Tween.Scale(number.transform, new Vector3(0.85f, 0.85f, 1f), duration: 0.15f, ease: Ease.OutQuad));
+                .Chain(Tween.Scale(number.transform, new Vector3(0.95f, 0.95f, 1f), duration: 0.10f, ease: Ease.OutQuad))
+                .Chain(Tween.Scale(number.transform, new Vector3(0.85f, 0.85f, 1f), duration: 0.10f, ease: Ease.OutQuad));
         }
         mergedNumbersToUpdate.Clear();
     }
@@ -395,7 +440,6 @@ public class GameController : MonoBehaviour
     {
         if (GameSettings.instance.colorMode == ColorMode.Light)
         {
-            print("Updating colors to light mode");
             Camera.main.backgroundColor = cameraLightBackground;
             gridBackground.color = gridLightBackground;
             foreach (SpriteRenderer spriteRenderer in tilesSpriteRenderers)
@@ -405,7 +449,6 @@ public class GameController : MonoBehaviour
         }
         else
         {
-            print("Updating colors to dark mode");
             Camera.main.backgroundColor = cameraDarkBackground;
             gridBackground.color = gridDarkBackground;
             foreach (SpriteRenderer spriteRenderer in tilesSpriteRenderers)
